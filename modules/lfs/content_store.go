@@ -4,6 +4,7 @@
 package lfs
 
 import (
+	"code.gitea.io/gitea/modules/structs"
 	"encoding/hex"
 	"errors"
 	"hash"
@@ -102,6 +103,28 @@ func (s *ContentStore) Verify(pointer Pointer) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// CommitAndVerify returns true if the object exists in the content store and size is correct.
+func (s *ContentStore) CommitAndVerify(pointer Pointer, commitParameter string) (bool, error) {
+	p := pointer.RelativePath()
+	err := s.ObjectStorage.CommitUpload(p, commitParameter)
+	if err != nil {
+		return false, err
+	}
+	fi, err := s.ObjectStorage.Stat(p)
+	if os.IsNotExist(err) || (err == nil && fi.Size() != pointer.Size) {
+		return false, nil
+	} else if err != nil {
+		log.Error("Unable stat file: %s for LFS OID[%s] Error: %v", p, pointer.Oid, err)
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *ContentStore) GenerateMultipartParts(pointer Pointer) (parts []*structs.MultipartObjectPart, abort *structs.MultipartEndpoint, verify *structs.MultipartEndpoint, err error) {
+	p := pointer.RelativePath()
+	return s.ObjectStorage.GenerateMultipartParts(p, pointer.Size)
 }
 
 // ReadMetaObject will read a git_model.LFSMetaObject and return a reader
